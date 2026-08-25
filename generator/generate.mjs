@@ -158,7 +158,41 @@ function buildTree() {
   states.length = 0;
   const root = newState(Array(9).fill(EMPTY), null, null, null, null);
   expand(root);
+  mergeDuplicateStates();
   return root;
+}
+
+// Merge states with identical board + lastAiCell into one canonical state.
+// Labels pointing to non-canonical states are rewired to the canonical one.
+function mergeDuplicateStates() {
+  const canonMap = new Map(); // boardKey:lastAi -> canonical state
+  const toRemove = new Set();
+
+  for (const s of states) {
+    const key = boardKey(s.board) + ':' + (s.lastAiCell ?? 'n');
+    if (canonMap.has(key)) {
+      const canon = canonMap.get(key);
+      toRemove.add(s.id);
+      // Rewire all label targets that point to s -> canon
+      for (const p of states) {
+        for (const m of p.moves) {
+          if (m.to.id === s.id) m.to = canon;
+        }
+      }
+    } else {
+      canonMap.set(key, s);
+    }
+  }
+
+  // Rebuild states array without removed states, re-assign compact IDs
+  const surviving = states.filter((s) => !toRemove.has(s.id));
+  const idMap = new Map();
+  for (let i = 0; i < surviving.length; i++) {
+    idMap.set(surviving[i].id, 's' + i);
+    surviving[i].id = 's' + i;
+  }
+  states.length = 0;
+  for (const s of surviving) states.push(s);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,74 +271,84 @@ function posClass(c) {
   return `.p${c}{top:${(row * CELL).toFixed(4)}%;left:${(col * CELL).toFixed(4)}%}`;
 }
 
+// Board fingerprinting: assign a short CSS class per unique board configuration.
+// Multiple states sharing the same board share the same class, collapsing
+// hundreds of :is(#id,...) selectors into a handful of .bN selectors.
+const boardClassMap = new Map();
+let boardClassCounter = 0;
+
+function boardKey(board) {
+  return board.join(',');
+}
+
+function getBoardClass(board) {
+  const key = boardKey(board);
+  if (!boardClassMap.has(key)) {
+    boardClassMap.set(key, 'b' + boardClassCounter++);
+  }
+  return boardClassMap.get(key);
+}
+
 function buildGroupedMarkRules() {
-  // For each (cell, mark) collect states where the mark is stable, i.e.
-  // present on the board and NOT the state's newest AI mark.
+  // For each (cell, mark) collect board-classes where the mark is stable.
   const groups = new Map();
   for (const s of states) {
+    const bc = getBoardClass(s.board);
     for (let c = 0; c < 9; c++) {
       const v = s.board[c];
       if (v === EMPTY) continue;
-      if (c === s.lastAiCell) continue; // rendered by the panel ai-mk instead
+      if (c === s.lastAiCell) continue;
       const key = `${c}:${v}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(s.id);
+      if (!groups.has(key)) groups.set(key, new Set());
+      groups.get(key).add(bc);
     }
   }
   const rules = [];
-  for (const [key, ids] of groups) {
+  for (const [key, classes] of groups) {
     const [c, v] = key.split(':');
     const glyph = v === String(X) ? 'X' : 'O';
     const color = v === String(X) ? 'var(--x)' : 'var(--o)';
     rules.push(
-      `body:has(:is(${ids.map((i) => '#' + i).join(',')}):checked) ` +
+      `body:has(:is(${[...classes].map((i) => '.' + i).join(',')}):checked) ` +
       `.cell:nth-child(${Number(c) + 1})::after{content:"${glyph}";color:${color}}`
     );
   }
-  return rules.join('\n');
+  return rules.join('');
 }
 
 function panelFor(s) {
-  const parts = [];
-  parts.push(`<section class="st${s.terminal ? ' end' : ''}" id="p-${s.id}">`);
-  parts.push('<div class="grid">');
+  const p = [];
+  p.push(`<section class="st${s.terminal ? ' end' : ''}" id="p-${s.id}"><div class="grid">`);
   if (!s.terminal) {
-    if (s.lastAiCell != null) {
-      parts.push(`<span class="ai-mk p${s.lastAiCell}">O</span>`);
-    }
-    for (const m of s.moves) {
-      parts.push(`<label class="mv p${m.cell}" for="${m.to.id}"></label>`);
-    }
+    if (s.lastAiCell != null) p.push(`<span class="ai-mk p${s.lastAiCell}">O</span>`);
+    for (const m of s.moves) p.push(`<label class="mv p${m.cell}" for="${m.to.id}"></label>`);
   } else if (s.terminal === 'AI_WIN' && s.lastAiCell != null) {
-    parts.push(`<span class="ai-mk p${s.lastAiCell}">O</span>`);
+    p.push(`<span class="ai-mk p${s.lastAiCell}">O</span>`);
   }
-  parts.push('</div>');
-
+  p.push('</div>');
   if (s.terminal === 'AI_WIN') {
-    parts.push('<p class="say">WOPR WINS.<br>BETTER LUCK NEXT TIME, PROFESSOR.</p>');
-    parts.push('<button type="reset" class="again">PLAY AGAIN</button>');
+    p.push('<p class="say tw"><span class="tw1"></span><br><span class="tw2"></span></p><button type="reset" class="again"></button>');
   } else if (s.terminal === 'DRAW') {
-    parts.push('<p class="say">DRAW.<br>A STRANGE GAME. THE ONLY WINNING MOVE IS NOT TO PLAY.</p>');
-    parts.push('<button type="reset" class="again">PLAY AGAIN</button>');
+    p.push('<p class="say td"><span class="td1"></span><br><span class="td2"></span></p><button type="reset" class="again"></button>');
   } else if (s.terminal === 'HUMAN_WIN') {
-    parts.push('<p class="say">YOU WIN.<br>THAT SHOULD NOT BE POSSIBLE.</p>');
-    parts.push('<button type="reset" class="again">PLAY AGAIN</button>');
+    p.push('<p class="say th"><span class="th1"></span><br><span class="th2"></span></p><button type="reset" class="again"></button>');
   } else if (s.parent == null) {
-    parts.push('<p class="say">YOU ARE X. MAKE YOUR MOVE.</p>');
+    p.push('<p class="say">YOU ARE X. MAKE YOUR MOVE.</p>');
   } else {
-    parts.push('<p class="say"><span class="an">WOPR ANALYZING\u2026</span><span class="ym">YOUR MOVE.</span></p>');
+    p.push('<p class="say"><span class="an">WOPR ANALYZING\u2026</span><span class="ym">YOUR MOVE.</span></p>');
   }
-  parts.push('</section>');
-  return parts.join('');
+  p.push('</section>');
+  return p.join('');
 }
 
 function buildBody() {
-  const radios = [];
+  const parts = [];
   for (const s of states) {
     const checked = s.parent == null ? ' checked' : '';
-    radios.push(`<input type="radio" name="g" id="${s.id}"${checked}>${panelFor(s)}`);
+    const bc = getBoardClass(s.board);
+    parts.push(`<input type="radio" name="g" id="${s.id}" class="${bc}"${checked}>${panelFor(s)}`);
   }
-  return radios.join('\n');
+  return parts.join('');
 }
 
 const INTRO_LINES = [
@@ -335,10 +379,8 @@ function buildIntro() {
 function buildCss(markRules, introHideAt) {
   const posRules = [];
   for (let c = 0; c < 9; c++) posRules.push(posClass(c));
-  return `
-:root{--phos:#39ff6e;--x:#39ff6e;--o:#b8ffd9;--bg:#030805;--dim:rgba(57,255,110,.35);--bw:clamp(220px,min(80vw,calc(95vh*320/620)),320px);--pad:calc(var(--bw)*30/320);--top:calc(var(--bw)*90/320);--gap:calc(var(--bw)*6/320)}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%}
+  return `:root{--phos:#39ff6e;--x:#39ff6e;--o:#b8ffd9;--bg:#030805;--dim:rgba(57,255,110,.35);--bw:clamp(220px,min(80vw,calc(95vh*320/620)),320px);--pad:calc(var(--bw)*30/320);--top:calc(var(--bw)*90/320);--gap:calc(var(--bw)*6/320)}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%}
 body{background:var(--bg);color:var(--phos);font-family:"Courier New",ui-monospace,monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:clamp(8px,2vw,16px)}
 #wopr{position:relative;width:calc(var(--bw)*380/320);height:calc(var(--bw)*620/320)}
 input[name="g"]{position:absolute;opacity:0;pointer-events:none}
@@ -358,29 +400,23 @@ input[name="g"]:checked+.st{display:block}
 .say{position:absolute;top:calc(var(--bw)*336/320);left:0;width:var(--bw);text-align:center;font-size:clamp(12px,3.5vw,14px);line-height:1.5;letter-spacing:.08em;margin:0;min-height:calc(var(--bw)*44/320)}
 .say .an{display:block;animation:fadeOut .3s .95s both}
 .say .ym{display:block;opacity:0;animation:fadeIn .3s 1.05s both;margin-top:-42px}
-@keyframes fadeOut{to{opacity:0}}
-@keyframes fadeIn{to{opacity:1}}
+@keyframes fadeOut{to{opacity:0}}@keyframes fadeIn{to{opacity:1}}
 .end .say{font-size:clamp(13px,3.8vw,15px)}
+.tw1::before{content:"WOPR WINS."}.tw2::before{content:"BETTER LUCK NEXT TIME, PROFESSOR."}
+.td1::before{content:"DRAW."}.td2::before{content:"A STRANGE GAME. THE ONLY WINNING MOVE IS NOT TO PLAY."}
+.th1::before{content:"YOU WIN."}.th2::before{content:"THAT SHOULD NOT BE POSSIBLE."}
 .again{position:absolute;top:calc(var(--bw)*392/320);left:50%;transform:translateX(-50%);background:transparent;color:var(--phos);border:1px solid var(--phos);padding:calc(var(--bw)*8/320) calc(var(--bw)*18/320);font-family:inherit;font-size:clamp(11px,3.2vw,13px);letter-spacing:.2em;cursor:pointer;text-shadow:0 0 8px var(--dim)}
-.again:hover{background:rgba(57,255,110,.12)}
+.again::after{content:"PLAY AGAIN"}.again:hover{background:rgba(57,255,110,.12)}
 ${markRules}
 .intro{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 calc(var(--bw)*40/320);z-index:40;pointer-events:none;background:var(--bg);animation:introHide .6s ${introHideAt}s both}
 .intro .ln{display:block;overflow:hidden;white-space:nowrap;width:0;font-size:clamp(12px,4vw,16px);letter-spacing:.1em;margin:6px 0;text-shadow:0 0 8px var(--dim)}
-@keyframes type{to{width:var(--w)}}
-@keyframes introHide{to{opacity:0;visibility:hidden}}
+@keyframes type{to{width:var(--w)}}@keyframes introHide{to{opacity:0;visibility:hidden}}
 .crt{position:fixed;inset:0;pointer-events:none;z-index:60;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}
 .crt::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.5) 100%)}
 @keyframes flick{0%,100%{opacity:1}92%{opacity:1}93%{opacity:.86}94%{opacity:1}}
 #wopr{animation:flick 5s infinite}
-@media (prefers-reduced-motion:reduce){
-  #wopr,.ai-mk,.intro,.say .an,.say .ym,.intro .ln{animation:none!important}
-  .intro{opacity:0;visibility:hidden}
-  .ai-mk{opacity:1}
-  .say .ym{opacity:1;margin-top:0}
-  .say .an{display:none}
-}
-${posRules.join('\n')}
-`.trim();
+@media(prefers-reduced-motion:reduce){#wopr,.ai-mk,.intro,.say .an,.say .ym,.intro .ln{animation:none!important}.intro{opacity:0;visibility:hidden}.ai-mk{opacity:1}.say .ym{opacity:1;margin-top:0}.say .an{display:none}}
+${posRules.join('')}`.trim();
 }
 
 function buildHtml() {
@@ -388,28 +424,7 @@ function buildHtml() {
   const intro = buildIntro();
   const css = buildCss(markRules, intro.hideAt);
   const body = buildBody();
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="icon" href="data:,">
-<title>WOPR // TIC-TAC-TOE</title>
-<style>
-${css}
-</style>
-</head>
-<body>
-<form id="wopr">
-<div class="masthead">W O P R<small>GLOBAL THERMONUCLEAR WAR &mdash; TIC-TAC-TOE</small></div>
-<div class="board"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
-${body}
-${intro.html}
-</form>
-<div class="crt"></div>
-</body>
-</html>
-`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>WOPR // TIC-TAC-TOE</title><style>${css}</style></head><body><form id="wopr"><div class="masthead">W O P R<small>GLOBAL THERMONUCLEAR WAR &mdash; TIC-TAC-TOE</small></div><div class="board"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>${body}${intro.html}</form><div class="crt"></div></body></html>`;
 }
 
 // ---------------------------------------------------------------------------
