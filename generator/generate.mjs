@@ -405,7 +405,7 @@ input[name="g"]:checked+.st{display:block}
 .tw1::before{content:"WOPR WINS."}.tw2::before{content:"BETTER LUCK NEXT TIME, PROFESSOR."}
 .td1::before{content:"DRAW."}.td2::before{content:"A STRANGE GAME. THE ONLY WINNING MOVE IS NOT TO PLAY."}
 .th1::before{content:"YOU WIN."}.th2::before{content:"THAT SHOULD NOT BE POSSIBLE."}
-.again{position:absolute;top:calc(var(--bw)*392/320);left:50%;transform:translateX(-50%);background:transparent;color:var(--phos);border:1px solid var(--phos);padding:calc(var(--bw)*8/320) calc(var(--bw)*18/320);font-family:inherit;font-size:clamp(11px,3.2vw,13px);letter-spacing:.2em;cursor:pointer;text-shadow:0 0 8px var(--dim)}
+.again{position:absolute;top:calc(var(--bw)*420/320);left:50%;transform:translateX(-50%);background:transparent;color:var(--phos);border:1px solid var(--phos);padding:calc(var(--bw)*8/320) calc(var(--bw)*18/320);font-family:inherit;font-size:clamp(11px,3.2vw,13px);letter-spacing:.2em;cursor:pointer;text-shadow:0 0 8px var(--dim)}
 .again::after{content:"PLAY AGAIN"}.again:hover{background:rgba(57,255,110,.12)}
 ${markRules}
 .intro{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 calc(var(--bw)*40/320);z-index:40;pointer-events:none;background:var(--bg);animation:introHide .6s ${introHideAt}s both}
