@@ -1,6 +1,6 @@
 # WOPR // TIC-TAC-TOE HTML CSS
 
-![HTML/CSS AI Terminator](ai_terminator.jpeg)
+![HTML/CSS AI Terminator](./ai_terminator.jpeg)
 
 **A zero-JavaScript, 100% HTML/CSS, tic-tac-toe game where the AI opponent is a deterministic finite state machine encoded entirely in markup — styled like the WOPR terminal from _WarGames_.**
 
