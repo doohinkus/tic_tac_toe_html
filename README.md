@@ -1,8 +1,10 @@
-# WOPR // TIC-TAC-TOE
+# WOPR // TIC-TAC-TOE HTML CSS
 
-**A 100% HTML/CSS, zero-JavaScript tic-tac-toe game where the AI opponent is a deterministic finite state machine encoded entirely in markup — styled like the WOPR terminal from *WarGames*.**
+![HTML/CSS AI Terminator](ai_terminator.jpeg)
 
-> *"A strange game. The only winning move is not to play."*
+**A zero-JavaScript, 100% HTML/CSS, tic-tac-toe game where the AI opponent is a deterministic finite state machine encoded entirely in markup — styled like the WOPR terminal from _WarGames_.**
+
+> _"A strange game. The only winning move is not to play."_
 
 ---
 
@@ -34,13 +36,15 @@ Or double-click `index.html` in your file manager. Requires a modern browser wit
 Every reachable game position is a hidden radio input:
 
 ```html
-<input type="radio" name="g" id="s42" class="b17">
+<input type="radio" name="g" id="s42" class="b17" />
 ```
 
 Only one radio is checked at a time (the root `s0` is checked by default). Each radio is immediately followed by its visible panel:
 
 ```css
-input[name="g"]:checked + .st { display: block }
+input[name="g"]:checked + .st {
+  display: block;
+}
 ```
 
 ### Making a Move
@@ -48,7 +52,8 @@ input[name="g"]:checked + .st { display: block }
 Inside each panel, clickable labels sit over empty cells and point to the next state:
 
 ```html
-<label class="mv p3" for="s99"></label>  <!-- click cell 3 → go to state s99 -->
+<label class="mv p3" for="s99"></label>
+<!-- click cell 3 → go to state s99 -->
 ```
 
 Clicking checks radio `s99`, hiding the current panel and revealing `s99`'s panel — where the AI's reply mark is already baked into the board. No JavaScript runs; the browser's native radio-group behavior handles the transition.
@@ -58,7 +63,10 @@ Clicking checks radio `s99`, hiding the current panel and revealing `s99`'s pane
 Marks (X and O) on the shared 3×3 grid are driven by CSS `:has()` selectors. Each radio input carries a board-fingerprint class (`.b0`, `.b1`, …) that identifies its board configuration. Grouped rules like:
 
 ```css
-body:has(:is(.b1,.b2,.b3,...):checked) .cell:nth-child(1)::after { content: "X"; color: var(--x) }
+body:has(:is(.b1, .b2, .b3, ...):checked) .cell:nth-child(1)::after {
+  content: "X";
+  color: var(--x);
+}
 ```
 
 tell the browser: "when any state with X in cell 1 is checked, render X there." States sharing the same board share the same class, keeping the CSS compact (~13KB for 18 rules).
@@ -68,7 +76,9 @@ tell the browser: "when any state with X in cell 1 is checked, render X there." 
 The AI's most recent O-mark is rendered as a `<span class="ai-mk">` inside the panel (not via CSS rules), with a blinking fade-in animation:
 
 ```css
-.ai-mk { animation: aiIn 1.1s .15s both }
+.ai-mk {
+  animation: aiIn 1.1s 0.15s both;
+}
 ```
 
 This gives the "WOPR thinking" effect without any JavaScript timers.
@@ -85,11 +95,11 @@ The full game tree is generated at dev-time by `generator/generate.mjs`. It enum
 
 ## Browser Support
 
-| Browser | Minimum Version | `:has()` Support |
-|---------|----------------|------------------|
-| Chrome / Edge | 105+ | ✅ |
-| Safari | 15.4+ | ✅ |
-| Firefox | 121+ | ✅ |
+| Browser       | Minimum Version | `:has()` Support |
+| ------------- | --------------- | ---------------- |
+| Chrome / Edge | 105+            | ✅               |
+| Safari        | 15.4+           | ✅               |
+| Firefox       | 121+            | ✅               |
 
 > **Note:** Reduced-motion preference (`prefers-reduced-motion: reduce`) disables animations gracefully.
 
@@ -139,4 +149,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-*Inspired by WOPR from **WarGames** (1983). "SHALL WE PLAY A GAME?"*
+_Inspired by WOPR from **WarGames** (1983). "SHALL WE PLAY A GAME?"_
