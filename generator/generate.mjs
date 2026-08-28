@@ -2,7 +2,9 @@
 // Dev-time generator for the 100% HTML/CSS WarGames tic-tac-toe game.
 // Enumerates the full game tree with a perfect (never-loses) minimax AI and
 // emits a single self-contained index.html. The emitted file contains NO
-// JavaScript: the state machine is encoded as radio inputs + :has() CSS.
+// JavaScript: the state machine is encoded as radio inputs whose checked state
+// drives visibility via simple sibling selectors (input:checked + .st). Each
+// panel is self-contained (static board marks), so no :has() is needed.
 
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -162,14 +164,18 @@ function buildTree() {
   return root;
 }
 
-// Merge states with identical board + lastAiCell into one canonical state.
+// Merge states with an identical board into one canonical state.
 // Labels pointing to non-canonical states are rewired to the canonical one.
+// (Keyed by board alone, NOT lastAiCell, so two states that differ only in
+// which O was played last collapse into a single panel. This is the maximum
+// dedupe that stays visually correct: a panel with board B is shared by every
+// path that reaches B, and its labels always lead to B + one X.)
 function mergeDuplicateStates() {
-  const canonMap = new Map(); // boardKey:lastAi -> canonical state
+  const canonMap = new Map(); // boardKey -> canonical state
   const toRemove = new Set();
 
   for (const s of states) {
-    const key = boardKey(s.board) + ':' + (s.lastAiCell ?? 'n');
+    const key = boardKey(s.board);
     if (canonMap.has(key)) {
       const canon = canonMap.get(key);
       toRemove.add(s.id);
@@ -216,12 +222,24 @@ function selfTest() {
       }
     }
     for (const m of s.moves) {
-      const b = s.board.slice();
-      b[m.cell] = X;
-      if (!m.to.terminal || m.to.terminal !== 'HUMAN_WIN') {
-        if (m.to.lastAiCell != null) b[m.to.lastAiCell] = O;
+      // Child board must equal s.board + X at m.cell, plus exactly one new O
+      // (WOPR's reply). Board-only merging makes the newest O ambiguous, so
+      // verify cell-wise instead: base == parent+X; child must match base
+      // everywhere except it adds exactly one O (or zero for HUMAN_WIN).
+      const base = s.board.slice();
+      base[m.cell] = X;
+      const child = m.to.board;
+      let same = true, extraO = 0;
+      for (let i = 0; i < 9; i++) {
+        if (base[i] === child[i]) continue;
+        if (base[i] === EMPTY && child[i] === O && extraO === 0) { extraO++; continue; }
+        same = false;
       }
-      if (b.join(',') !== m.to.board.join(',')) {
+      // WOPR adds an O reply unless the game ends on the human's own move
+      // (DRAW = board full, HUMAN_WIN = X wins). Non-terminal children and
+      // AI_WIN terminals all carry one extra O.
+      const wantO = m.to.terminal === 'DRAW' || m.to.terminal === 'HUMAN_WIN' ? 0 : 1;
+      if (!same || extraO !== wantO) {
         errors.push(`${s.id}->${m.to.id}: board delta mismatch`);
       }
     }
@@ -271,60 +289,33 @@ function posClass(c) {
   return `.p${c}{top:${(row * CELL).toFixed(4)}%;left:${(col * CELL).toFixed(4)}%}`;
 }
 
-// Board fingerprinting: assign a short CSS class per unique board configuration.
-// Multiple states sharing the same board share the same class, collapsing
-// hundreds of :is(#id,...) selectors into a handful of .bN selectors.
-const boardClassMap = new Map();
-let boardClassCounter = 0;
-
 function boardKey(board) {
   return board.join(',');
 }
 
-function getBoardClass(board) {
-  const key = boardKey(board);
-  if (!boardClassMap.has(key)) {
-    boardClassMap.set(key, 'b' + boardClassCounter++);
+// Render a board's fixed marks as sibling elements flagged with a helper class
+// (e.g. "///X///" for an X at index 1): 00000XOO0 style. Each char maps to a cell
+// - no ::after/:has() needed. No board-class fingerprinting required.
+function markCells(board, lastAi) {
+  const out = [];
+  for (let c = 0; c < 9; c++) {
+    const v = board[c];
+    if (v === EMPTY) continue;
+    if (c === lastAi) continue; // newest O is rendered separately with blink (.ai-mk)
+    out.push(`<i class="${v === X ? 'x' : 'o'} p${c}">${v === X ? 'X' : 'O'}</i>`);
   }
-  return boardClassMap.get(key);
-}
-
-function buildGroupedMarkRules() {
-  // For each (cell, mark) collect board-classes where the mark is stable.
-  const groups = new Map();
-  for (const s of states) {
-    const bc = getBoardClass(s.board);
-    for (let c = 0; c < 9; c++) {
-      const v = s.board[c];
-      if (v === EMPTY) continue;
-      if (c === s.lastAiCell) continue;
-      const key = `${c}:${v}`;
-      if (!groups.has(key)) groups.set(key, new Set());
-      groups.get(key).add(bc);
-    }
-  }
-  const rules = [];
-  for (const [key, classes] of groups) {
-    const [c, v] = key.split(':');
-    const glyph = v === String(X) ? 'X' : 'O';
-    const color = v === String(X) ? 'var(--x)' : 'var(--o)';
-    rules.push(
-      `body:has(:is(${[...classes].map((i) => '.' + i).join(',')}):checked) ` +
-      `.cell:nth-child(${Number(c) + 1})::after{content:"${glyph}";color:${color}}`
-    );
-  }
-  return rules.join('');
+  return out.join('');
 }
 
 function panelFor(s) {
   const p = [];
+  // Static per-panel board: grid is drawn as a CSS background on .grid, so the
+  // panel only carries its fixed marks and the click overlays. Zero :has() /
+  // board-class selectors - visibility is just input:checked+.st.
   p.push(`<section class="st${s.terminal ? ' end' : ''}" id="p-${s.id}"><div class="grid">`);
-  if (!s.terminal) {
-    if (s.lastAiCell != null) p.push(`<span class="ai-mk p${s.lastAiCell}">O</span>`);
-    for (const m of s.moves) p.push(`<label class="mv p${m.cell}" for="${m.to.id}"></label>`);
-  } else if (s.terminal === 'AI_WIN' && s.lastAiCell != null) {
-    p.push(`<span class="ai-mk p${s.lastAiCell}">O</span>`);
-  }
+  p.push(markCells(s.board, s.lastAiCell));
+  if (s.lastAiCell != null) p.push(`<i class="ai-mk p${s.lastAiCell}">O</i>`);
+  for (const m of s.moves) p.push(`<label class="mv p${m.cell}" for="${m.to.id}"></label>`);
   p.push('</div>');
   if (s.terminal === 'AI_WIN') {
     p.push('<p class="say tw"><span class="tw1"></span><br><span class="tw2"></span></p><button type="reset" class="again"></button>');
@@ -345,8 +336,7 @@ function buildBody() {
   const parts = [];
   for (const s of states) {
     const checked = s.parent == null ? ' checked' : '';
-    const bc = getBoardClass(s.board);
-    parts.push(`<input type="radio" name="g" id="${s.id}" class="${bc}"${checked}>${panelFor(s)}`);
+    parts.push(`<input type="radio" name="g" id="${s.id}"${checked}>${panelFor(s)}`);
   }
   return parts.join('');
 }
@@ -360,9 +350,9 @@ const INTRO_LINES = [
 ];
 
 function buildIntro() {
-  const rate = 0.04; // seconds per char
-  const gap = 0.3;
-  let t = 0.3;
+  const rate = 0.02; // seconds per char
+  const gap = 0.15;
+  let t = 0.2;
   const spans = [];
   let totalEnd = 0;
   for (const line of INTRO_LINES) {
@@ -376,30 +366,31 @@ function buildIntro() {
   return { html: `<div class="intro">${spans.join('')}</div>`, hideAt: (totalEnd + 1.2).toFixed(2) };
 }
 
-function buildCss(markRules, introHideAt) {
+function buildCss(introHideAt) {
   const posRules = [];
   for (let c = 0; c < 9; c++) posRules.push(posClass(c));
-  return `:root{--phos:#39ff6e;--x:#39ff6e;--o:#b8ffd9;--bg:#030805;--dim:rgba(57,255,110,.35);--bw:clamp(220px,min(80vw,calc(95vh*320/620)),320px);--pad:calc(var(--bw)*30/320);--top:calc(var(--bw)*90/320);--gap:calc(var(--bw)*6/320)}
+  return `:root{--phos:#39ff6e;--x:#39ff6e;--o:#b8ffd9;--bg:#030805;--dim:rgba(57,255,110,.35);--bw:clamp(220px,min(80vw,calc(95vh*320/620)),320px);--pad:calc(var(--bw)*30/320);--top:calc(var(--bw)*90/320);--t:calc(var(--bw)/3);--tt:calc(var(--bw)*2/3);--gap:calc(var(--bw)*6/320)}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%}
 body{background:var(--bg);color:var(--phos);font-family:"Courier New",ui-monospace,monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:clamp(8px,2vw,16px)}
 #wopr{position:relative;width:calc(var(--bw)*380/320);height:calc(var(--bw)*620/320)}
 input[name="g"]{position:absolute;opacity:0;pointer-events:none}
 .masthead{position:absolute;top:0;left:0;right:0;text-align:center;letter-spacing:.2em;font-size:clamp(12px,3.5vw,14px);text-shadow:0 0 8px var(--dim)}
 .masthead small{display:block;font-size:clamp(8px,2.5vw,10px);opacity:.6;letter-spacing:.35em;margin-top:4px}
-.board{position:absolute;top:var(--top);left:var(--pad);width:var(--bw);height:var(--bw);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:var(--gap)}
-.cell{position:relative;border:1px solid var(--dim);border-radius:6px;background:rgba(57,255,110,.04)}
-.cell::after{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(38px,15vw,60px);font-weight:700;text-shadow:0 0 12px currentColor}
 .st{position:absolute;top:var(--top);left:var(--pad);width:var(--bw);height:calc(var(--bw)*430/320);display:none}
 input[name="g"]:checked+.st{display:block}
-.grid{position:absolute;top:0;left:0;width:var(--bw);height:var(--bw)}
-.mv,.ai-mk{position:absolute;width:${CELL.toFixed(4)}%;height:${CELL.toFixed(4)}%}
-.mv{cursor:pointer;display:block}
+.grid{position:absolute;top:0;left:0;width:var(--bw);height:var(--bw);border:1px solid var(--dim);border-radius:8px;background:
+linear-gradient(90deg,transparent 0 calc(var(--t) - 1px),var(--dim) calc(var(--t) - 1px) calc(var(--t) + 1px),transparent calc(var(--t) + 1px) calc(var(--tt) - 1px),var(--dim) calc(var(--tt) - 1px) calc(var(--tt) + 1px),transparent calc(var(--tt) + 1px) 100%),
+linear-gradient(0deg,transparent 0 calc(var(--t) - 1px),var(--dim) calc(var(--t) - 1px) calc(var(--t) + 1px),transparent calc(var(--t) + 1px) calc(var(--tt) - 1px),var(--dim) calc(var(--tt) - 1px) calc(var(--tt) + 1px),transparent calc(var(--tt) + 1px) 100%),
+rgba(57,255,110,.04)}
+.x,.o{position:absolute;width:${CELL.toFixed(4)}%;height:${CELL.toFixed(4)}%;display:flex;align-items:center;justify-content:center;font-size:clamp(38px,15vw,60px);font-weight:700;text-shadow:0 0 12px currentColor;z-index:2}
+.x{color:var(--x)}.o{color:var(--o)}
+.mv{position:absolute;width:${CELL.toFixed(4)}%;height:${CELL.toFixed(4)}%;cursor:pointer;display:block;z-index:3}
 .mv:hover::after{content:"X";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(38px,15vw,60px);font-weight:700;color:var(--x);opacity:.28;text-shadow:0 0 12px currentColor}
-.ai-mk{display:flex;align-items:center;justify-content:center;font-size:clamp(38px,15vw,60px);font-weight:700;color:var(--o);text-shadow:0 0 12px currentColor;opacity:0;animation:aiIn 1.1s .15s both}
-@keyframes aiIn{0%,35%{opacity:0}50%{opacity:1}62%{opacity:.15}78%,100%{opacity:1}}
+.ai-mk{position:absolute;width:${CELL.toFixed(4)}%;height:${CELL.toFixed(4)}%;display:flex;align-items:center;justify-content:center;font-size:clamp(38px,15vw,60px);font-weight:700;color:var(--o);text-shadow:0 0 12px currentColor;opacity:0;animation:aiIn .45s .05s both;z-index:2}
+@keyframes aiIn{0%,40%{opacity:0}55%{opacity:1}68%{opacity:.15}82%,100%{opacity:1}}
 .say{position:absolute;top:calc(var(--bw)*336/320);left:0;width:var(--bw);text-align:center;font-size:clamp(12px,3.5vw,14px);line-height:1.5;letter-spacing:.08em;margin:0;min-height:calc(var(--bw)*44/320)}
-.say .an{display:block;animation:fadeOut .3s .95s both}
-.say .ym{display:block;opacity:0;animation:fadeIn .3s 1.05s both;margin-top:-42px}
+.say .an{display:block;animation:fadeOut .25s .35s both}
+.say .ym{display:block;opacity:0;animation:fadeIn .25s .45s both;margin-top:-42px}
 @keyframes fadeOut{to{opacity:0}}@keyframes fadeIn{to{opacity:1}}
 .end .say{font-size:clamp(13px,3.8vw,15px)}
 .tw1::before{content:"WOPR WINS."}.tw2::before{content:"BETTER LUCK NEXT TIME, PROFESSOR."}
@@ -407,8 +398,7 @@ input[name="g"]:checked+.st{display:block}
 .th1::before{content:"YOU WIN."}.th2::before{content:"THAT SHOULD NOT BE POSSIBLE."}
 .again{position:absolute;top:calc(var(--bw)*420/320);left:50%;transform:translateX(-50%);background:transparent;color:var(--phos);border:1px solid var(--phos);padding:calc(var(--bw)*8/320) calc(var(--bw)*18/320);font-family:inherit;font-size:clamp(11px,3.2vw,13px);letter-spacing:.2em;cursor:pointer;text-shadow:0 0 8px var(--dim)}
 .again::after{content:"PLAY AGAIN"}.again:hover{background:rgba(57,255,110,.12)}
-${markRules}
-.intro{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 calc(var(--bw)*40/320);z-index:40;pointer-events:none;background:var(--bg);animation:introHide .6s ${introHideAt}s both}
+.intro{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 calc(var(--bw)*40/320);z-index:40;pointer-events:none;background:var(--bg);animation:introHide .2s ${introHideAt}s both}
 .intro .ln{display:block;overflow:hidden;white-space:nowrap;width:0;font-size:clamp(12px,4vw,16px);letter-spacing:.1em;margin:6px 0;text-shadow:0 0 8px var(--dim)}
 @keyframes type{to{width:var(--w)}}@keyframes introHide{to{opacity:0;visibility:hidden}}
 .crt{position:fixed;inset:0;pointer-events:none;z-index:60;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}
@@ -420,11 +410,10 @@ ${posRules.join('')}`.trim();
 }
 
 function buildHtml() {
-  const markRules = buildGroupedMarkRules();
   const intro = buildIntro();
-  const css = buildCss(markRules, intro.hideAt);
+  const css = buildCss(intro.hideAt);
   const body = buildBody();
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>WOPR // TIC-TAC-TOE</title><style>${css}</style></head><body><form id="wopr"><div class="masthead">W O P R<small>GLOBAL THERMONUCLEAR WAR &mdash; TIC-TAC-TOE</small></div><div class="board"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>${body}${intro.html}</form><div class="crt"></div></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>WOPR // TIC-TAC-TOE</title><style>${css}</style></head><body><form id="wopr"><div class="masthead">W O P R<small>GLOBAL THERMONUCLEAR WAR &mdash; TIC-TAC-TOE</small></div>${body}${intro.html}</form><div class="crt"></div></body></html>`;
 }
 
 // ---------------------------------------------------------------------------
