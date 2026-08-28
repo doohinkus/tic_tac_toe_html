@@ -357,8 +357,10 @@ function buildIntro() {
   let totalEnd = 0;
   for (const line of INTRO_LINES) {
     const dur = line.length * rate;
+    // Target width must include letter-spacing (.1em per char), which the `ch`
+    // unit does not account for - otherwise long lines get clipped at the end.
     spans.push(
-      `<span class="ln" style="--w:${line.length}ch;animation:type ${dur.toFixed(2)}s steps(${line.length}) ${t.toFixed(2)}s forwards">${line}</span>`
+      `<span class="ln" style="--w:calc(${line.length}ch + ${(line.length * 0.1).toFixed(2)}em);animation:type ${dur.toFixed(2)}s steps(${line.length}) ${t.toFixed(2)}s forwards">${line}</span>`
     );
     t += dur + gap;
     totalEnd = t;
