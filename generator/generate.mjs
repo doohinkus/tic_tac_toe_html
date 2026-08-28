@@ -372,7 +372,7 @@ function buildCss(introHideAt) {
   const posRules = [];
   for (let c = 0; c < 9; c++) posRules.push(posClass(c));
   return `:root{--phos:#39ff6e;--x:#39ff6e;--o:#b8ffd9;--bg:#030805;--dim:rgba(57,255,110,.35);--bw:clamp(220px,min(80vw,calc(95vh*320/620)),320px);--pad:calc(var(--bw)*30/320);--top:calc(var(--bw)*90/320)}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%}html{overflow-x:clip}
 body{background:var(--bg);color:var(--phos);font-family:"Courier New",ui-monospace,monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:clamp(8px,2vw,16px)}
 #wopr{position:relative;width:calc(var(--bw)*380/320);height:calc(var(--bw)*620/320)}
 input[name="g"]{position:absolute;opacity:0;pointer-events:none}
