@@ -6,22 +6,27 @@
 // drives visibility via simple sibling selectors (input:checked + .st). Each
 // panel is self-contained (static board marks), so no :has() is needed.
 
-import { writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const OUT = join(ROOT, '..', 'index.html');
-const PATHS_OUT = join(ROOT, 'paths.json');
+const OUT = join(ROOT, "..", "index.html");
+const PATHS_OUT = join(ROOT, "paths.json");
 
 const EMPTY = 0;
 const X = 1; // human, moves first
 const O = 2; // WOPR
 
 const WIN_LINES = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8],
-  [0, 3, 6], [1, 4, 7], [2, 5, 8],
-  [0, 4, 8], [2, 4, 6],
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6],
 ];
 
 // Deterministic preference order used to break minimax ties:
@@ -121,7 +126,7 @@ const states = [];
 
 function newState(board, lastAiCell, terminal, parent, humanCell) {
   const s = {
-    id: 's' + states.length,
+    id: "s" + states.length,
     board: board.slice(),
     lastAiCell,
     terminal,
@@ -141,14 +146,14 @@ function expand(state) {
     let terminal = null;
     let lastAi = null;
     if (winner(b) === X) {
-      terminal = 'HUMAN_WIN'; // unreachable against perfect WOPR
+      terminal = "HUMAN_WIN"; // unreachable against perfect WOPR
     } else if (isFull(b)) {
-      terminal = 'DRAW';
+      terminal = "DRAW";
     } else {
       const ai = bestMove(b);
       b[ai] = O;
       lastAi = ai;
-      if (winner(b) === O) terminal = 'AI_WIN';
+      if (winner(b) === O) terminal = "AI_WIN";
     }
     const child = newState(b, lastAi, terminal, state, c);
     state.moves.push({ cell: c, to: child });
@@ -194,8 +199,8 @@ function mergeDuplicateStates() {
   const surviving = states.filter((s) => !toRemove.has(s.id));
   const idMap = new Map();
   for (let i = 0; i < surviving.length; i++) {
-    idMap.set(surviving[i].id, 's' + i);
-    surviving[i].id = 's' + i;
+    idMap.set(surviving[i].id, "s" + i);
+    surviving[i].id = "s" + i;
   }
   states.length = 0;
   for (const s of surviving) states.push(s);
@@ -229,16 +234,21 @@ function selfTest() {
       const base = s.board.slice();
       base[m.cell] = X;
       const child = m.to.board;
-      let same = true, extraO = 0;
+      let same = true,
+        extraO = 0;
       for (let i = 0; i < 9; i++) {
         if (base[i] === child[i]) continue;
-        if (base[i] === EMPTY && child[i] === O && extraO === 0) { extraO++; continue; }
+        if (base[i] === EMPTY && child[i] === O && extraO === 0) {
+          extraO++;
+          continue;
+        }
         same = false;
       }
       // WOPR adds an O reply unless the game ends on the human's own move
       // (DRAW = board full, HUMAN_WIN = X wins). Non-terminal children and
       // AI_WIN terminals all carry one extra O.
-      const wantO = m.to.terminal === 'DRAW' || m.to.terminal === 'HUMAN_WIN' ? 0 : 1;
+      const wantO =
+        m.to.terminal === "DRAW" || m.to.terminal === "HUMAN_WIN" ? 0 : 1;
       if (!same || extraO !== wantO) {
         errors.push(`${s.id}->${m.to.id}: board delta mismatch`);
       }
@@ -268,11 +278,20 @@ function simulate(humanPick) {
     const hc = humanPick(b);
     b[hc] = X;
     humanCells.push(hc);
-    if (winner(b) === X) { result = 'HUMAN_WIN'; break; }
-    if (isFull(b)) { result = 'DRAW'; break; }
+    if (winner(b) === X) {
+      result = "HUMAN_WIN";
+      break;
+    }
+    if (isFull(b)) {
+      result = "DRAW";
+      break;
+    }
     const ac = bestMove(b);
     b[ac] = O;
-    if (winner(b) === O) { result = 'AI_WIN'; break; }
+    if (winner(b) === O) {
+      result = "AI_WIN";
+      break;
+    }
   }
   return { humanCells, result };
 }
@@ -290,7 +309,7 @@ function posClass(c) {
 }
 
 function boardKey(board) {
-  return board.join(',');
+  return board.join(",");
 }
 
 // Render a board's fixed marks as sibling elements flagged with a helper class
@@ -302,9 +321,11 @@ function markCells(board, lastAi) {
     const v = board[c];
     if (v === EMPTY) continue;
     if (c === lastAi) continue; // newest O is rendered separately with blink (.ai-mk)
-    out.push(`<i class="${v === X ? 'x' : 'o'} p${c}">${v === X ? 'X' : 'O'}</i>`);
+    out.push(
+      `<i class="${v === X ? "x" : "o"} p${c}">${v === X ? "X" : "O"}</i>`,
+    );
   }
-  return out.join('');
+  return out.join("");
 }
 
 function panelFor(s) {
@@ -312,41 +333,54 @@ function panelFor(s) {
   // Static per-panel board: grid is drawn as a CSS background on .grid, so the
   // panel only carries its fixed marks and the click overlays. Zero :has() /
   // board-class selectors - visibility is just input:checked+.st.
-  p.push(`<section class="st${s.terminal ? ' end' : ''}" id="p-${s.id}"><div class="grid">`);
+  p.push(
+    `<section class="st${s.terminal ? " end" : ""}" id="p-${s.id}"><div class="grid">`,
+  );
   p.push(markCells(s.board, s.lastAiCell));
   if (s.lastAiCell != null) p.push(`<i class="ai-mk p${s.lastAiCell}">O</i>`);
-  for (const m of s.moves) p.push(`<label class="mv p${m.cell}" for="${m.to.id}"></label>`);
-  p.push('</div>');
-  if (s.terminal === 'AI_WIN') {
-    p.push('<p class="say tw"><span class="tw1"></span><br><span class="tw2"></span></p><button type="reset" class="again"></button>');
-  } else if (s.terminal === 'DRAW') {
-    p.push('<p class="say td"><span class="td1"></span><br><span class="td2"></span></p><button type="reset" class="again"></button>');
-  } else if (s.terminal === 'HUMAN_WIN') {
-    p.push('<p class="say th"><span class="th1"></span><br><span class="th2"></span></p><button type="reset" class="again"></button>');
+  for (const m of s.moves)
+    p.push(`<label class="mv p${m.cell}" for="${m.to.id}"></label>`);
+  p.push("</div>");
+  if (s.terminal === "AI_WIN") {
+    p.push(
+      '<p class="say tw"><span class="tw1"></span><br><span class="tw2"></span></p><button type="reset" class="again"></button>',
+    );
+  } else if (s.terminal === "DRAW") {
+    p.push(
+      '<p class="say td"><span class="td1"></span><br><span class="td2"></span></p><button type="reset" class="again"></button>',
+    );
+  } else if (s.terminal === "HUMAN_WIN") {
+    p.push(
+      '<p class="say th"><span class="th1"></span><br><span class="th2"></span></p><button type="reset" class="again"></button>',
+    );
   } else if (s.parent == null) {
     p.push('<p class="say">YOU ARE X. MAKE YOUR MOVE.</p>');
   } else {
-    p.push('<p class="say"><span class="an">WOPR ANALYZING\u2026</span><span class="ym">YOUR MOVE.</span></p>');
+    p.push(
+      '<p class="say"><span class="an">WOPR ANALYZING\u2026</span><span class="ym">YOUR MOVE.</span></p>',
+    );
   }
-  p.push('</section>');
-  return p.join('');
+  p.push("</section>");
+  return p.join("");
 }
 
 function buildBody() {
   const parts = [];
   for (const s of states) {
-    const checked = s.parent == null ? ' checked' : '';
-    parts.push(`<input type="radio" name="g" id="${s.id}"${checked}>${panelFor(s)}`);
+    const checked = s.parent == null ? " checked" : "";
+    parts.push(
+      `<input type="radio" name="g" id="${s.id}"${checked}>${panelFor(s)}`,
+    );
   }
-  return parts.join('');
+  return parts.join("");
 }
 
 const INTRO_LINES = [
-  'LOGON: FALKEN, DAVID',
-  'PASSWORD: JOSHUA',
-  'ACCESS GRANTED',
-  'GREETINGS PROFESSOR FALKEN',
-  'SHALL WE PLAY A GAME?',
+  "LOGON: FALKEN, DAVID",
+  "PASSWORD: JOSHUA",
+  "ACCESS GRANTED",
+  "GREETINGS PROFESSOR FALKEN",
+  "SHALL WE PLAY A GAME?",
 ];
 
 function buildIntro() {
@@ -360,12 +394,15 @@ function buildIntro() {
     // Target width must include letter-spacing (.1em per char), which the `ch`
     // unit does not account for - otherwise long lines get clipped at the end.
     spans.push(
-      `<span class="ln" style="--w:calc(${line.length}ch + ${(line.length * 0.1).toFixed(2)}em);animation:type ${dur.toFixed(2)}s steps(${line.length}) ${t.toFixed(2)}s forwards">${line}</span>`
+      `<span class="ln" style="--w:calc(${line.length}ch + ${(line.length * 0.1).toFixed(2)}em);animation:type ${dur.toFixed(2)}s steps(${line.length}) ${t.toFixed(2)}s forwards">${line}</span>`,
     );
     t += dur + gap;
     totalEnd = t;
   }
-  return { html: `<div class="intro">${spans.join('')}</div>`, hideAt: (totalEnd + 1.2).toFixed(2) };
+  return {
+    html: `<div class="intro">${spans.join("")}</div>`,
+    hideAt: (totalEnd + 1.2).toFixed(2),
+  };
 }
 
 function buildCss(introHideAt) {
@@ -389,7 +426,7 @@ input[name="g"]:checked+.st{display:block}
 @keyframes aiIn{0%,40%{opacity:0}55%{opacity:1}68%{opacity:.15}82%,100%{opacity:1}}
 .say{position:absolute;top:calc(var(--bw)*336/320);left:0;width:var(--bw);text-align:center;font-size:clamp(12px,3.5vw,14px);line-height:1.5;letter-spacing:.08em;margin:0;min-height:calc(var(--bw)*44/320)}
 .say .an{display:block;animation:fadeOut .25s .35s both}
-.say .ym{display:block;opacity:0;animation:fadeIn .25s .45s both;margin-top:-42px}
+.say .ym{display:block;opacity:0;animation:fadeIn .25s .45s both;margin-top:-22px}
 @keyframes fadeOut{to{opacity:0}}@keyframes fadeIn{to{opacity:1}}
 .end .say{font-size:clamp(13px,3.8vw,15px)}
 .tw1::before{content:"WOPR WINS."}.tw2::before{content:"BETTER LUCK NEXT TIME, PROFESSOR."}
@@ -405,7 +442,7 @@ input[name="g"]:checked+.st{display:block}
 @keyframes flick{0%,100%{opacity:1}92%{opacity:1}93%{opacity:.86}94%{opacity:1}}
 #wopr{animation:flick 5s infinite}
 @media(prefers-reduced-motion:reduce){#wopr,.ai-mk,.intro,.say .an,.say .ym,.intro .ln{animation:none!important}.intro{opacity:0;visibility:hidden}.ai-mk{opacity:1}.say .ym{opacity:1;margin-top:0}.say .an{display:none}}
-${posRules.join('')}`.trim();
+${posRules.join("")}`.trim();
 }
 
 function buildHtml() {
@@ -424,39 +461,51 @@ const args = process.argv.slice(2);
 buildTree();
 const { errors, leaves, stateCount } = selfTest();
 
-if (args.includes('--selftest')) {
+if (args.includes("--selftest")) {
   console.log(`states: ${stateCount}`);
-  console.log(`leaves: AI_WIN=${leaves.AI_WIN} DRAW=${leaves.DRAW} HUMAN_WIN=${leaves.HUMAN_WIN}`);
+  console.log(
+    `leaves: AI_WIN=${leaves.AI_WIN} DRAW=${leaves.DRAW} HUMAN_WIN=${leaves.HUMAN_WIN}`,
+  );
   console.log(`HUMAN_WIN terminals reachable: ${leaves.HUMAN_WIN}`);
   if (errors.length) {
-    console.error('SELF-TEST FAILED:');
-    for (const e of errors) console.error('  ' + e);
+    console.error("SELF-TEST FAILED:");
+    for (const e of errors) console.error("  " + e);
     process.exit(1);
   }
-  console.log('SELF-TEST PASSED');
+  console.log("SELF-TEST PASSED");
   process.exit(0);
 }
 
 const drawLine = simulate(humanBest);
 const loseLine = simulate(humanWorst);
 
-if (args.includes('--paths')) {
+if (args.includes("--paths")) {
   console.log(JSON.stringify({ draw: drawLine, lose: loseLine }, null, 2));
   process.exit(0);
 }
 
 const html = buildHtml();
-writeFileSync(OUT, html, 'utf8');
-writeFileSync(PATHS_OUT, JSON.stringify({ draw: drawLine, lose: loseLine }, null, 2), 'utf8');
+writeFileSync(OUT, html, "utf8");
+writeFileSync(
+  PATHS_OUT,
+  JSON.stringify({ draw: drawLine, lose: loseLine }, null, 2),
+  "utf8",
+);
 
 console.log(`states: ${stateCount}`);
-console.log(`leaves: AI_WIN=${leaves.AI_WIN} DRAW=${leaves.DRAW} HUMAN_WIN=${leaves.HUMAN_WIN}`);
+console.log(
+  `leaves: AI_WIN=${leaves.AI_WIN} DRAW=${leaves.DRAW} HUMAN_WIN=${leaves.HUMAN_WIN}`,
+);
 if (errors.length) {
-  console.error('SELF-TEST FAILED:');
-  for (const e of errors) console.error('  ' + e);
+  console.error("SELF-TEST FAILED:");
+  for (const e of errors) console.error("  " + e);
   process.exit(1);
 }
 console.log(`self-test: PASSED`);
-console.log(`draw line:  ${drawLine.humanCells.join(' ')} -> ${drawLine.result}`);
-console.log(`lose line:  ${loseLine.humanCells.join(' ')} -> ${loseLine.result}`);
+console.log(
+  `draw line:  ${drawLine.humanCells.join(" ")} -> ${drawLine.result}`,
+);
+console.log(
+  `lose line:  ${loseLine.humanCells.join(" ")} -> ${loseLine.result}`,
+);
 console.log(`wrote ${OUT} (${(html.length / 1024).toFixed(1)} KB)`);
