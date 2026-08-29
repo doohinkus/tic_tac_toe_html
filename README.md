@@ -1,5 +1,7 @@
 # WOPR // TIC-TAC-TOE HTML CSS
 
+## https://html-ai-tic-tac-toe.bluespicemachine.org
+
 ![HTML/CSS AI Terminator](/ai_terminator.jpeg)
 
 **A zero-JavaScript, 100% HTML/CSS, tic-tac-toe game where the AI opponent is a deterministic finite state machine encoded entirely in markup — styled like the WOPR terminal from _WarGames_.**
@@ -20,6 +22,12 @@
 ---
 
 ## Play
+
+Live:
+
+- https://html-ai-tic-tac-toe.bluespicemachine.org
+
+Locally:
 
 ```bash
 open index.html
